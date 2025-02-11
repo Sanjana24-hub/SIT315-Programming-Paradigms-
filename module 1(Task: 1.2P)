@@ -2,38 +2,52 @@ int temperaturePin = A0;
 int ledPin = 9; 
 float threshold = 30.0;
 volatile bool ledState = false; // Flag for LED state
+volatile bool temperatureCrossed = false; // Flag to indicate threshold crossing
 
 void setup() 
 {
-  pinMode(ledPin, OUTPUT); //here we set LED pin as an OUTPUT so it can turned ON or OFF
-  pinMode(2, INPUT_PULLUP);  
+  pinMode(ledPin, OUTPUT); // Set LED pin as OUTPUT
+  pinMode(2, INPUT_PULLUP); 
   //set pin 2 (button) as an input and enable internal pull-up resistor
   //this makes the default state of the button is HIGH
   // when we press the button, then it connect to GRN and state change to LOW
   Serial.begin(9600);  
-  attachInterrupt(digitalPinToInterrupt(2), toggleLED, FALLING);
-  //Attach an interrupt to pin 2
-  //Call the function toggleLED()
-  // FALLING - high to low transition
+
+  attachInterrupt(digitalPinToInterrupt(2), checkTemperature, FALLING);
+  // Attach an interrupt to pin 2, 
+  //calling checkTemperature() 
+  //FALLING  (button press - high to low)
 }
 
-
-void toggleLED() 
+void checkTemperature() 
 {
-  ledState = !ledState;  // Toggle LED state
-  digitalWrite(ledPin, ledState ? HIGH : LOW);
-  //Turn LED ON if ledState is true, otherwise turns it OFF
+  int sensorValue = analogRead(temperaturePin);
+  float voltage = sensorValue * (5.0 / 1023.0);
+  float temperature = (voltage - 0.5) * 100; // Convert voltage to temperature
+
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.println(" °C");
+
+  if (temperature > threshold) 
+  {
+    temperatureCrossed = true;  // Set flag if threshold is crossed
+  }
+  else 
+  {
+    temperatureCrossed = false; // Reset flag if threshold is not crossed
+  }
 }
 
 void loop() 
 {
-  int sensorValue = analogRead(temperaturePin);
-  float voltage = sensorValue * (5.0 / 1023.0);
-  float temperature = (voltage - 0.5) * 100;
+  // If the temperature threshold is crossed, toggle the LED state
+  if (temperatureCrossed) 
+  {
+    ledState = !ledState; // Toggle LED state
+    digitalWrite(ledPin, ledState ? HIGH : LOW); // Turn LED on/off based on ledState
+    temperatureCrossed = false; // Reset the flag after LED toggle
+  }
 
-  Serial.print("Temperature:- ");
-  Serial.print(temperature);
-  Serial.println(" °C");
-
-  delay(1000);
+  delay(100); // Small delay 
 }
