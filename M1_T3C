@@ -1,0 +1,73 @@
+// Define sensor and output pins
+int temperaturePin = A0;  // Temperature sensor pin
+int ledPin = 9;           // LED pin
+int pirSensorPin = 3;     // PIR motion sensor pin
+
+//threshold temperature
+float threshold = 30.0;
+
+//Flags for interrupts
+volatile bool ledState = false;
+volatile bool temperatureCrossed = false;
+volatile bool motionDetected = false;
+
+void setup() 
+{
+  pinMode(ledPin, OUTPUT); // LED as output
+  pinMode(2, INPUT_PULLUP); // Button as input
+  pinMode(pirSensorPin, INPUT); // PIR motion sensor as input
+
+  Serial.begin(9600); // Start serial communication
+
+  // interrupts
+  attachInterrupt(digitalPinToInterrupt(2), checkTemperature, FALLING);// Button press for temperature check
+  attachInterrupt(digitalPinToInterrupt(3), detectMotion, RISING); // PIR motion sensor triggers on movement
+}
+
+// Interrupt Service Routine for temperature check
+void checkTemperature() 
+{
+  int sensorValue = analogRead(temperaturePin);
+  float voltage = sensorValue * (5.0 / 1023.0);
+  float temperature = (voltage - 0.5) * 100; // Convert voltage to temperature
+
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.println(" °C");
+
+  if (temperature > threshold) 
+  {
+    temperatureCrossed = true;
+  } 
+  else 
+  {
+    temperatureCrossed = false;
+  }
+}
+
+// Interrupt Service Routine for motion detection
+void detectMotion() 
+{
+  motionDetected = true;
+}
+
+void loop() 
+{
+  // Handle temperature threshold
+  if (temperatureCrossed) 
+  {
+    ledState = !ledState;  // Toggle LED state
+    digitalWrite(ledPin, ledState ? HIGH : LOW);  
+    temperatureCrossed = false;
+  }
+  // Handle motion detection
+  if (motionDetected) 
+  {
+    Serial.println("!!! Motion Detected !!!");
+    digitalWrite(ledPin, HIGH);  // Turn LED on when motion detected
+    delay(1000);   // Keep LED on for 1 second
+    digitalWrite(ledPin, LOW);
+    motionDetected = false;
+  }
+   delay(100);  // Small delay
+}
