@@ -1,0 +1,99 @@
+#define LED_PIN 13  // Define LED pin
+#define METER_PIN A4 // Define analog input pin
+
+const double MIN_FREQ = 0.1;  // 0.1 Hz (blink every 10 seconds)
+const double MAX_FREQ = 5.0;  // 5.0 Hz (blink every 0.2 seconds)
+double lastFrequency = -1;  // Store last frequency
+
+void setup() 
+{
+  pinMode(LED_PIN, OUTPUT); //configures pin 13(LED_PIN) as an output and this pin will control LED
+  pinMode(METER_PIN, INPUT); //Sets pin A4(METER_PIN) as an input
+  Serial.begin(9600); // Start serial communication
+
+  startTimer(0.5); 
+  //Sets initial blinking frequency to 0.5 Hz
+  //Means LED will blink once every 2 seconds
+
+}
+
+void loop() 
+{ 
+  //analogRead() reads voltage from the potentiometer (pin A4)
+  //Returns a value between 0 (0V) and 1023 (5V)
+  int potValue = analogRead(METER_PIN); 
+  
+ 
+  double frequency = mapFloat(potValue, 0, 1023, MIN_FREQ, MAX_FREQ);
+  //Takes potentiometer value (0-1023)
+  //Converts it to a frequency between MIN_FREQ-->(0.1 Hz) and MAX_FREQ =(5.0 Hz)
+  //potValue = 0 → frequency = 0.1 Hz (blink every 10 seconds)
+  //potValue = 1023 → frequency = 5.0 Hz (blink every 0.2 seconds)
+  
+  
+  if (abs(frequency - lastFrequency) > 0.01) 
+  {  // Compares new frequency with previous frequency
+    // Only updates if change is greater than 0.01 Hz
+    lastFrequency = frequency; 
+    startTimer(frequency);
+    //Print current value of frequency
+    Serial.print("Current Frequency:- ");
+    Serial.print(frequency);
+    Serial.println(" Hz");
+  }
+  
+  delay(100); // Small delay
+}
+
+
+  double mapFloat(double x, double in_min, double in_max, double out_min, double out_max)
+    // x: The input value to convert (in our case, potentiometer reading 0-1023)
+    //in_min: Minimum input value (0 for potentiometer)
+    //in_max: Maximum input value (1023 for potentiometer)
+    //out_min: Minimum output value (MIN_FREQ = 0.1 Hz)
+    //out_max: Maximum output value (MAX_FREQ = 5.0 Hz)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+   //example: 
+   // x = 512, in_min = 0, in_max = 1023, out_min = 0.1, out_max = 5.0
+   //Step 1: (x - in_min) = (512 - 0) = 512
+   //Step 2: (out_max - out_min) = (5.0 - 0.1) = 4.9
+   //Step 3: (in_max - in_min) = (1023 - 0) = 1023
+   //Step 4: (512 * 4.9) / 1023 = 2.45
+   //Step 5: 2.45 + 0.1 = 2.55 Hz
+}
+
+
+ void startTimer(double timerFrequency)//Takes desired frequency as input 
+ {
+  noInterrupts(); // Disable interrupts during setup
+  
+  TCCR1A = 0; // Clear Timer1 Control Register A
+  TCCR1B = 0; // Clear Timer1 Control Register B
+  TCNT1 = 0;  // Reset Timer1 counter
+  
+  long compareValue = (16000000.0 / (1024.0 * timerFrequency)) - 1;
+  compareValue = constrain(compareValue, 1, 65535);
+  OCR1A = compareValue; 
+   //This determines when the timer should trigger an interrupt
+  //Arduino's clock speed (16MHz)= 16000000
+  //timer prescaler value = 1024
+  //Formula calculates when timer should trigger
+  //constrain keeps value between 1 and 65535 (16-bit timer limit)
+  //OCR1A holds the compare value
+  
+  TCCR1B |= (1 << WGM12);  //line sets timer to CTC (Clear Timer on Compare Match) mode, as in this mode, 
+  //Timer1 counts up to OCR1A, then resets and triggering an interrupt.
+  TCCR1B |= (1 << CS12) | (1 << CS10); // Set prescaler to 1024
+
+  TIMSK1 |= (1 << OCIE1A); // Enable Timer1 compare interrupt
+
+  interrupts(); // Re-enable interrupts
+}
+
+//This ISR toggles the LED state (HIGH to LOW or LOW to HIGH) and 
+//creates LED blinking effect at the set frequency
+ISR(TIMER1_COMPA_vect) 
+{
+  digitalWrite(LED_PIN, digitalRead(LED_PIN) ^ 1); // Toggle LED state
+}
