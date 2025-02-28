@@ -1,0 +1,172 @@
+#include <avr/io.h>        // Include AVR input/output library for hardware register access
+#include <avr/interrupt.h> // Include AVR interrupt library for handling interrupts
+
+// Define pin numbers for various sensors and actuators
+#define PIR_PIN 2          // PIR motion sensor input pin
+#define TRIG_PIN 6         // Ultrasonic sensor trigger pin
+#define ECHO_PIN 7         // Ultrasonic sensor echo pin
+#define TEMP_SENSOR A0     // Temperature sensor analog input pin
+#define BUZZER_PIN 8       // Buzzer output pin
+#define LED_MAIN 9         // Main LED output pin
+#define LED_TIMER 10       // Timer-based LED output pin
+
+volatile bool motionDetected = false;  // Flag for PIR sensor motion detection
+volatile bool distanceAlert = false;   // Flag for ultrasonic sensor distance alert
+volatile bool tempAlert = false;       // Flag for high temperature alert
+volatile bool timerFlag = false;       // Flag for timer interrupt event
+
+// Setup function runs once when the microcontroller starts
+void setup() 
+{
+    Serial.begin(9600);  // Initialize serial communication at 9600 baud rate
+
+ 
+    pinMode(PIR_PIN, INPUT);         // Set PIR sensor pin as input
+    pinMode(TRIG_PIN, OUTPUT);       // Set ultrasonic trigger pin as output
+    pinMode(ECHO_PIN, INPUT);        // Set ultrasonic echo pin as input
+    pinMode(BUZZER_PIN, OUTPUT);     // Set buzzer pin as output
+    pinMode(LED_MAIN, OUTPUT);       // Set main LED pin as output
+    pinMode(LED_TIMER, OUTPUT);      // Set timer LED pin as output
+
+    // Enable external interrupt for PIR motion sensor
+    attachInterrupt(digitalPinToInterrupt(PIR_PIN), PIR_ISR, RISING); 
+  
+ 
+    PCICR |= (1 << PCIE2);    
+    PCMSK2 |= (1 << PCINT23); 
+
+    // Setup timer interrupt (5 sec)
+    setupTimer();
+
+    sei(); // Enable global interrupts
+}
+
+// Interrupt Service Routine for PIR sensor
+void PIR_ISR() 
+{
+    motionDetected = true; // Set motion detected flag to true when movement is detected
+}
+
+// Pin Change Interrupt Service Routine for ultrasonic sensor (D7)
+ISR(PCINT2_vect)
+{
+    distanceAlert = true; 
+}
+
+// Timer Interrupt Setup (Fire every 5 seconds)
+void setupTimer() 
+{
+    cli();  // Disable global interrupts to prevent changes during setup
+    TCCR1A = 0; // Clear Timer1 Control Register A (reset mode settings)
+    TCCR1B = 0; // Clear Timer1 Control Register B (reset prescaler and clock settings)
+    TCNT1 = 0;  // Reset Timer1 counter to 0
+    
+    OCR1A = 31249; // Set compare match value for 5-second intervals
+                   // Calculation: (16MHz / (256 * 2Hz)) - 1
+
+    TCCR1B |= (1 << WGM12); // Set Timer1 to CTC (Clear Timer on Compare Match) mode
+    TCCR1B |= (1 << CS12);  // Set prescaler to 256
+    TIMSK1 |= (1 << OCIE1A); // Enable Timer Compare Interrupt
+    sei();  // Re-enable global interrupts
+}
+
+// Timer Interrupt Service Routine (ISR)
+ISR(TIMER1_COMPA_vect) 
+{
+    timerFlag = true; // Set timer flag to true when the timer fires
+}
+
+// Function to measure distance using an ultrasonic sensor
+long readUltrasonic() 
+{
+    digitalWrite(TRIG_PIN, LOW);   // Ensure trigger pin is low
+    delayMicroseconds(2);          // Wait for 2 microseconds
+    digitalWrite(TRIG_PIN, HIGH);  // Send 10-microsecond pulse to trigger sensor
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);   // Stop the pulse
+
+    return pulseIn(ECHO_PIN, HIGH) * 0.034 / 2; // Convert time to distance
+}
+
+// Function to read temperature from sensor
+float readTemperature() 
+{
+    int total = 0;
+
+    // Take 10 readings to improve accuracy
+    for (int i = 0; i < 10; i++)
+    {
+        total += analogRead(TEMP_SENSOR); // Read analog value from temperature sensor
+        delay(10); // delay between readings
+    }
+
+    float voltage = (total / 10.0) * (5.0 / 1024.0); // Convert ADC value to voltage
+    return (voltage - 0.5) * 100.0; // Convert voltage to temperature in °C
+}
+
+// Main loop runs continuously
+void loop() 
+{
+    // Read sensor values
+    long distance = readUltrasonic();   // Get distance from ultrasonic sensor
+    float temperature = readTemperature(); // Get temperature from TMP36 sensor
+
+    // Print sensor readings to serial monitor
+    Serial.print("Temperature: "); Serial.print(temperature); Serial.println(" °C");
+    Serial.print("Distance: "); Serial.print(distance); Serial.println(" cm");
+
+    // Check for motion detection
+    if (motionDetected) 
+    {
+        Serial.println("Motion Detected!"); // Print message
+        digitalWrite(LED_MAIN, HIGH);      // Turn on main LED
+        digitalWrite(BUZZER_PIN, HIGH);    // Turn on buzzer
+        delay(1000);                       // Keep buzzer on for 1 second
+        digitalWrite(BUZZER_PIN, LOW);     // Turn off buzzer
+        motionDetected = false;            // Reset flag
+    }
+
+    // Check if an object is too close
+    if (distance < 10) 
+    {
+        Serial.println("Object Too Close!"); // Print
+        distanceAlert = true;                // Set distance alert flag
+    } 
+    else 
+    {
+        distanceAlert = false; // Reset flag if object is far enough
+    }
+
+    // Check for high temperature condition
+    if (temperature > 30) 
+    {
+        Serial.println("High Temperature Alert!"); // Print
+        tempAlert = true;                          // Set temperature alert flag
+    } 
+    else 
+    {
+        tempAlert = false; // Reset flag if temperature is normal
+    }
+
+    // LED and Buzzer Logic--> Turn ON if any alert condition is detected
+    if (motionDetected || distanceAlert || tempAlert) 
+    {
+        digitalWrite(LED_MAIN, HIGH);  // Turn on LED
+        digitalWrite(BUZZER_PIN, HIGH); // Turn on buzzer
+    } 
+    else 
+    {
+        digitalWrite(LED_MAIN, LOW);   // Turn off LED
+        digitalWrite(BUZZER_PIN, LOW); // Turn off buzzer
+    }
+
+    // Toggle LED_TIMER every 5 seconds using the timer flag
+    if (timerFlag) 
+    {
+        digitalWrite(LED_TIMER, !digitalRead(LED_TIMER)); // Toggle LED state
+        Serial.println("Timer Interrupt Triggered!"); // Print message
+        timerFlag = false; // Reset timer flag
+    }
+
+    delay(500); // delay before the next loop iteration
+}
