@@ -1,0 +1,62 @@
+#include <iostream>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
+#include <omp.h>  // OpenMP library for parallel processing
+
+using namespace std;
+const int N = 1000;  // Matrix size (N x N)
+const int num_threads = 2;  // Number of threads for parallel execution
+
+// Global matrices
+vector<vector<int>> A(N, vector<int>(N)); // First matrix
+vector<vector<int>> B(N, vector<int>(N)); // Second matrix
+vector<vector<int>> C(N, vector<int>(N)); // Resultant matrix
+
+// Function to initialize matrices with random values (0 - 9)
+void initializeMatrix(vector<vector<int>> &matrix) 
+{
+    for (int i = 0; i < N; i++) 
+    {
+        for (int j = 0; j < N; j++) 
+        {
+            matrix[i][j] = rand() % 10; // Assigning random values between 0 and 9
+
+        }
+    }
+}
+
+// OpenMP Parallelized Matrix Multiplication
+void multiplyMatrices() 
+{
+    // Parallelizing the outermost loop using OpenMP
+    #pragma omp parallel for num_threads(num_threads)
+    for (int i = 0; i < N; i++) 
+    {
+        for (int j = 0; j < N; j++) 
+        {
+            C[i][j] = 0; // Initialize result matrix element to 0
+            for (int k = 0; k < N; k++) 
+            {
+                C[i][j] += A[i][k] * B[k][j]; // Matrix multiplication logic
+            }
+        }
+    }
+}
+
+int main() 
+{
+    srand(time(0));
+    // Initialize matrices A and B with random values
+    initializeMatrix(A);
+    initializeMatrix(B);
+    // Start timing the matrix multiplication
+    double start = omp_get_wtime();
+    // Perform matrix multiplication in parallel
+    multiplyMatrices();
+    // End timing
+    double end = omp_get_wtime();
+    // Print the time taken for execution
+    cout << "OpenMP Matrix Multiplication completed in " << (end - start) << " seconds." << endl;
+    return 0;
+}
