@@ -1,0 +1,53 @@
+#include <iostream>
+#include <vector>
+#include <cstdlib>  // For rand() and srand()
+#include <ctime>    // For clock(), time()
+
+using namespace std;
+
+const int N = 500;  // Matrix size
+
+// Function to initialize matrices with random values
+void initializeMatrix(vector<vector<int>> &matrix) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            matrix[i][j] = rand() % 10;  // Use rand() properly
+        }
+    }
+}
+
+// Function to multiply matrices A and B, store result in C
+void multiplyMatrices(const vector<vector<int>> &A, 
+                      const vector<vector<int>> &B, 
+                      vector<vector<int>> &C) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            C[i][j] = 0;
+            for (int k = 0; k < N; k++) {
+                C[i][j] += A[i][k] * B[k][j];
+            }
+        }
+    }
+}
+
+int main() {
+    srand(time(0));  // Initialize random seed
+
+    // Properly initialize 2D vectors
+    vector<vector<int>> A(N, vector<int>(N));
+    vector<vector<int>> B(N, vector<int>(N));
+    vector<vector<int>> C(N, vector<int>(N));
+
+    initializeMatrix(A);
+    initializeMatrix(B);
+
+    clock_t start = clock();
+    multiplyMatrices(A, B, C);
+    clock_t end = clock();
+
+    double time_taken = double(end - start) / CLOCKS_PER_SEC;
+    cout << "Matrix multiplication completed in " << time_taken << " seconds." << endl;
+
+    return 0;
+}
+1st
