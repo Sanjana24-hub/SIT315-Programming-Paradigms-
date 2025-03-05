@@ -1,0 +1,76 @@
+#include <iostream>
+#include <vector>
+#include <pthread.h>
+#include <ctime>
+
+using namespace std;
+
+const int N = 500;      // Matrix size (change for testing)
+const int num_threads = 4;  // Number of threads
+
+vector<vector<int>> A(N, vector<int>(N));
+vector<vector<int>> B(N, vector<int>(N));
+vector<vector<int>> C(N, vector<int>(N));
+
+struct ThreadData {
+    int thread_id;
+};
+
+// Function to initialize matrices with random values
+void initializeMatrix(vector<vector<int>> &matrix) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            matrix[i][j] = rand() % 10;
+        }
+    }
+}
+
+// Thread function for matrix multiplication
+void* multiplyMatrices(void* arg) {
+    ThreadData* data = (ThreadData*) arg;
+    int thread_id = data->thread_id;
+    
+    int start = (N / num_threads) * thread_id;
+    int end = (N / num_threads) * (thread_id + 1);
+
+    for (int i = start; i < end; i++) {
+        for (int j = 0; j < N; j++) {
+            C[i][j] = 0;
+            for (int k = 0; k < N; k++) {
+                C[i][j] += A[i][k] * B[k][j];
+            }
+        }
+    }
+
+    pthread_exit(NULL);
+}
+
+int main() {
+    srand(time(0));
+
+    initializeMatrix(A);
+    initializeMatrix(B);
+
+    pthread_t threads[num_threads];
+    ThreadData threadData[num_threads];
+
+    clock_t start = clock();
+
+    // Create threads
+    for (int i = 0; i < num_threads; i++) {
+        threadData[i].thread_id = i;
+        pthread_create(&threads[i], NULL, multiplyMatrices, (void*)&threadData[i]);
+    }
+
+    // Join threads
+    for (int i = 0; i < num_threads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    clock_t end = clock();
+    double time_taken = double(end - start) / CLOCKS_PER_SEC;
+
+    cout << "Parallel Matrix Multiplication completed in " << time_taken << " seconds." << endl;
+
+    return 0;
+}
