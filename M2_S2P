@@ -1,0 +1,124 @@
+#include <iostream>       // For standard I/O operations
+#include <cstdlib>        // For rand() and srand()
+#include <chrono>         // For measuring execution time
+#include <pthread.h>      // For (multithreading)
+
+using namespace std;
+using namespace std::chrono;
+
+#define NUM_THREADS 2     // Define the number of threads 
+
+// Structure to hold data for the threads
+struct ThreadData 
+{
+    int *v1, *v2, *v3;    // Pointers to vectors
+    unsigned long start, end;  
+};
+
+// Function to generate random numbers in parallel
+void *randomVector(void *arg) 
+{
+    ThreadData *data = (ThreadData *)arg;  // Cast argument to ThreadData pointer
+    for (unsigned long i = data->start; i < data->end; i++)  // Iterate over assigned range
+    {
+        data->v1[i] = rand() % 100;  // Generate random numbers for v1
+        data->v2[i] = rand() % 100;  // Generate random numbers for v2
+    }
+    pthread_exit(NULL);  // Exit thread
+}
+
+// Function to compute vector addition in parallel
+void *vectorAddition(void *arg) 
+{
+    ThreadData *data = (ThreadData *)arg;  // Cast argument to ThreadData pointer
+    for (unsigned long i = data->start; i < data->end; i++)  // Iterate over assigned range
+    {
+        data->v3[i] = data->v1[i] + data->v2[i];  //execute element wise addition
+    }
+    pthread_exit(NULL);  // Exit thread
+}
+
+int main() 
+{
+    unsigned long size = 10000000;  // Define large vector size
+    srand(time(0));  // Seed the random number generator
+
+    // Allocate memory for vectors
+    int *v1 = (int *)malloc(size * sizeof(int));
+    int *v2 = (int *)malloc(size * sizeof(int));
+    int *v3 = (int *)malloc(size * sizeof(int));
+
+    // Check if memory allocation was successful
+    if (!v1 || !v2 || !v3) 
+    {
+        cout << "Memory allocation failed!!!" << endl;
+        return 1;  // Exit program if memory allocation fails
+    }
+
+    pthread_t threads[NUM_THREADS];  // Array to hold thread IDs
+    ThreadData threadData[NUM_THREADS];  // Array to hold thread data
+    unsigned long chunkSize = size / NUM_THREADS;  // Divide work among threads
+
+    // **Sequential Execution**
+    auto start_seq = high_resolution_clock::now();  // Start timer
+
+    // Generate random numbers sequentially
+    for (unsigned long i = 0; i < size; i++) 
+    {
+        v1[i] = rand() % 100;
+        v2[i] = rand() % 100;
+    }
+
+    // Compute vector addition sequentially
+    for (unsigned long i = 0; i < size; i++) 
+    {
+        v3[i] = v1[i] + v2[i];
+    }
+
+    auto stop_seq = high_resolution_clock::now();  // Stop timer
+    auto duration_seq = duration_cast<milliseconds>(stop_seq - start_seq);  // Compute duration
+    cout << "Sequential Execution Time: " << duration_seq.count() << " ms" << endl;
+
+    // **Parallel Execution**
+    auto start_par = high_resolution_clock::now();  // Start timer
+
+    // **Random Number Generation in Parallel**
+    for (int i = 0; i < NUM_THREADS; i++) 
+    {
+        threadData[i] = {v1, v2, v3, i * chunkSize, (i + 1) * chunkSize};  // Assign work to thread
+        pthread_create(&threads[i], NULL, randomVector, (void *)&threadData[i]);  // Create thread
+    }
+
+    // Wait for all threads to finish random number generation
+    for (int i = 0; i < NUM_THREADS; i++) 
+    {
+        pthread_join(threads[i], NULL);
+    }
+
+    // **Vector Addition in Parallel**
+    for (int i = 0; i < NUM_THREADS; i++) 
+    {
+        pthread_create(&threads[i], NULL, vectorAddition, (void *)&threadData[i]);  // Create thread
+    }
+
+    // Wait for all threads to finish vector addition
+    for (int i = 0; i < NUM_THREADS; i++) 
+    {
+        pthread_join(threads[i], NULL);
+    }
+
+    auto stop_par = high_resolution_clock::now();  // Stop timer
+    auto duration_par = duration_cast<milliseconds>(stop_par - start_par);  // Compute duration
+    cout << "Parallel Execution Time: " << duration_par.count() << " ms" << endl;
+
+    //speedup achieved by parallel execution
+    double speedup = (double)duration_seq.count() / duration_par.count();
+    cout << "Speedup Achieved: " << speedup << "x" << endl;
+
+    // Free allocated memory
+    free(v1);
+    free(v2);
+    free(v3);
+
+    return 0;  // Successful execution
+}
