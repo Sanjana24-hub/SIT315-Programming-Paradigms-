@@ -1,0 +1,171 @@
+#include <chrono>       // For measuring execution time
+#include <cstdlib>      // For rand() and malloc()
+#include <iostream>     // For input/output operations
+#include <pthread.h>    // For using threads (pthreads)
+#include <vector>       // For using vectors
+#include <iomanip>      // For formatting output
+#include <time.h>       // For  random number generator
+
+using namespace std::chrono;
+using namespace std;
+
+// Global variables for storing vectors
+int *v1, *v2, *v3;
+unsigned long size;  // Size of the vectors
+
+// Structure to pass data to threads
+struct ThreadData 
+{
+    int thread_id;              // ID of the thread
+    unsigned long start_index;  // Start index for the computation
+    unsigned long end_index;    // End index for the computation
+};
+
+// Function executed by each thread to initialize and add vectors
+void* processVectorPortion(void* arg) 
+{
+    ThreadData* data = (ThreadData*)arg; // Extract thread data
+    unsigned long start = data->start_index;
+    unsigned long end = data->end_index;
+
+    // Set a unique seed for each thread to generate different random values
+    unsigned int seed = time(0) + data->thread_id;
+    srand(seed);
+
+    // Initialize vectors with random values
+    for (unsigned long i = start; i < end; i++)
+    {
+        v1[i] = rand() % 100; // Assign random values to v1
+        v2[i] = rand() % 100; // Assign random values to v2
+    }
+
+    // Perform element wise addition of vectors
+    for (unsigned long i = start; i < end; i++) 
+    {
+        v3[i] = v1[i] + v2[i];
+    }
+
+    return NULL;
+}
+
+// Function to execute parallel vector addition using pthreads
+long long runParallelWithThreads(int threads, unsigned long custom_chunk_size) 
+{
+    // Determine the chunk size per thread
+    unsigned long local_chunk_size = (custom_chunk_size > 0) ? custom_chunk_size : size / threads;
+
+    // Create arrays for threads and also for their corresponding data
+    pthread_t* thread_handles = new pthread_t[threads];
+    ThreadData* thread_data = new ThreadData[threads];
+
+    // Start measuring execution time
+    auto start = high_resolution_clock::now();
+
+    // Create threads to process vector portions
+    for (int i = 0; i < threads; i++) 
+    {
+        thread_data[i].thread_id = i;
+        thread_data[i].start_index = i * local_chunk_size;
+        thread_data[i].end_index = min(size, (i + 1) * local_chunk_size);
+
+        pthread_create(&thread_handles[i], NULL, processVectorPortion, (void*)&thread_data[i]);
+    }
+
+    // Wait for all threads to finish the execution
+    for (int i = 0; i < threads; i++) {
+        pthread_join(thread_handles[i], NULL);
+    }
+
+    // Stop measuring the execution time
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+
+    // Free dynamically allocated memory
+    delete[] thread_handles;
+    delete[] thread_data;
+
+    return duration.count(); // Return execution time in microseconds
+}
+
+// Function to execute --> sequential vector addition
+long long runSequential() 
+{
+    auto start = high_resolution_clock::now(); // Start timing
+
+    srand(time(0)); // Seed the random number generator
+
+    // Initialize vectors with random values
+    for (unsigned long i = 0; i < size; i++) 
+    {
+        v1[i] = rand() % 100;
+        v2[i] = rand() % 100;
+    }
+
+    // Perform element wise addition of vectors
+    for (unsigned long i = 0; i < size; i++) 
+    {
+        v3[i] = v1[i] + v2[i];
+    }
+
+    auto stop = high_resolution_clock::now(); // Stop timing
+    return duration_cast<microseconds>(stop - start).count(); // Return execution time
+}
+
+int main(int argc, char* argv[]) 
+{
+    // Default vector size
+    size = 10000000;
+
+    // specify vector size 
+    if (argc > 1) 
+    {
+        size = atol(argv[1]);
+    }
+
+    cout << "Vector size: " << size << endl;
+
+    // Allocate memory for vectors
+    v1 = (int*)malloc(size * sizeof(int));
+    v2 = (int*)malloc(size * sizeof(int));
+    v3 = (int*)malloc(size * sizeof(int));
+
+    // Check if memory allocation was successful
+    if (v1 == NULL || v2 == NULL || v3 == NULL) 
+    {
+        cout << "Memory allocation failed!!" << endl;
+        return -1;
+    }
+
+    // List of thread counts and chunk sizes to test
+    vector<int> thread_counts = {1, 2, 4}; // Number of threads
+    vector<unsigned long> chunk_sizes = {size / 2, size / 4}; // Different chunk sizes
+
+    // Print table headers
+    cout << "Threads | Chunk Size | Execution Time (\u03bcs) | Speedup" << endl;
+    cout << "--------|------------|---------------------|--------" << endl;
+
+    // Run sequential execution first
+    long long sequential_time = runSequential();
+    cout << "Sequential | N/A        | " << sequential_time << " | 1.00" << endl;
+
+    // Run parallel execution with different thread counts and chunk sizes
+    for (int threads : thread_counts)
+    {
+        for (unsigned long chunk_size : chunk_sizes) 
+        {
+            long long parallel_time = runParallelWithThreads(threads, chunk_size);
+            double speedup = (double)sequential_time / parallel_time;
+
+            // Print execution results
+            cout << threads << "       | " << chunk_size << " | " 
+                 << parallel_time << " | " << fixed << setprecision(2) << speedup << endl;
+        }
+    }
+
+    // Free allocated memory
+    free(v1);
+    free(v2);
+    free(v3);
+
+    return 0;
+}
