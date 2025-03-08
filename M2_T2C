@@ -1,0 +1,60 @@
+#include <iostream>
+#include <vector>
+#include <chrono>
+#include <iomanip>
+
+using namespace std;
+
+//Function to perform QuickSort
+vector<int> quicksort(vector<int> arr)
+{
+    // if array has 0 or 1 elements, its already sorted
+    if (arr.size() <= 1) 
+        return arr;
+    //choose pivot element-- middle element of the array
+    int pivot = arr[arr.size() / 2];
+    //creating three partitions: left--(smaller), middle--(equal), right-- (greater)
+    vector<int> left, middle, right;
+    
+    //loop through array elements and distribute them into respective partitions
+    for (int x : arr) 
+    {
+        if (x < pivot)         // if x is smaller or less than the pivot element 
+        left.push_back(x);    // Element smaller than pivot go to "left
+        else if (x == pivot)  // if x= pivot element then
+        middle.push_back(x); // Elements equal to pivot go to "middle"
+        else
+        right.push_back(x);// Elements greater than pivot go to "right"
+    }
+    
+    vector<int> sorted_left = quicksort(left);
+    vector<int> sorted_right = quicksort(right);
+
+    // Merging sorted partitions: left + middle + right
+    sorted_left.insert(sorted_left.end(), middle.begin(), middle.end());
+    sorted_left.insert(sorted_left.end(), sorted_right.begin(), sorted_right.end());
+    
+    return sorted_left; // Return fully sorted array
+}
+
+int main() 
+{
+    //Sample unsorted array
+    vector<int> arr = {3, 6, 8, 10, 1, 2, 1};
+
+    //Start measuring execution time
+    auto start_time = chrono::high_resolution_clock::now();
+    //Perform QuickSort
+    vector<int> sorted_arr = quicksort(arr);
+    //Stop measuring execution time
+    auto end_time = chrono::high_resolution_clock::now();
+
+    //Calculate time in seconds
+    double duration = chrono::duration<double>(end_time - start_time).count();
+
+    //Display output 
+    cout << fixed << setprecision(10);
+    cout << "Sequential QuickSort Time: " << duration << " seconds" << endl;
+
+    return 0;
+}
