@@ -1,0 +1,76 @@
+#include <iostream>   // For input-output operations
+#include <ctime>      // For measuring execution time
+#include <omp.h>      // OpenMP library for parallel programming
+#include <iomanip>    // For formatting output precision
+
+using namespace std;
+
+// Function to partition the array for QuickSort
+int partition(int arr[], int low, int high) 
+{
+    int pivot = arr[high]; //choosing last element as the pivot
+    int i = low - 1;       //index for smaller elements
+
+    //loop through the array and swap elements based on pivot
+    for (int j = low; j < high; j++) 
+    {
+        if (arr[j] < pivot) 
+        {
+            i++;  // Move index for the smaller element
+            swap(arr[i], arr[j]); // swap elements
+        }
+    }
+    swap(arr[i + 1], arr[high]); // Place pivot element in the correct position
+    return (i + 1); // Return pivot index
+}
+
+// Parallel QuickSort using OpenMP
+void parallelQuickSort(int arr[], int low, int high) 
+{
+    if (low < high) 
+    {
+        int pivot = partition(arr, low, high); //Partition the array
+
+        //Parallelize recursive calls using OpenMP sections
+        #pragma omp parallel sections
+        {
+            #pragma omp section
+            parallelQuickSort(arr, low, pivot - 1); //sort left partition
+            
+            #pragma omp section
+            parallelQuickSort(arr, pivot + 1, high); //sort right partition
+        }
+    }
+}
+
+//utility function to print the array
+void printArray(int arr[], int size) 
+{
+    for (int i = 0; i < size; i++) //Loop through the array
+    cout << arr[i] << " ";     //Print each element
+    cout << endl; //move to the next line
+}
+
+
+int main() 
+{
+    int arr[] = {10, 7, 8, 9, 1, 5}; //sample array
+    int n = sizeof(arr) / sizeof(arr[0]); //calculate array size
+
+    cout << "Original array: ";
+    printArray(arr, n); //print the unsorted array
+
+    clock_t start_time = clock();  //start timing the execution
+    parallelQuickSort(arr, 0, n - 1); //call parallel QuickSort
+    clock_t end_time = clock(); // End timing
+
+    cout << "Sorted array: ";
+    printArray(arr, n); // Print the sorted array
+
+    // Calculate and print execution time in pure decimal format
+    double execution_time = double(end_time - start_time) / CLOCKS_PER_SEC;
+    cout << fixed << setprecision(6) << "parallelQuickSort Execution time: " 
+         << execution_time << " seconds" << endl;
+
+    return 0;
+}
