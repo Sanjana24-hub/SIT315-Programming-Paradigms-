@@ -1,0 +1,111 @@
+#include <iostream>     // For input/output operations
+#include <queue>        // For queue data structure
+#include <thread>       // For creating threads
+#include <mutex>        // For thread synchronization
+#include <condition_variable> // For thread synchronization
+#include <unordered_map>     // For storing traffic data
+#include <chrono>       // For sleep operations
+#include <cstdlib>      // For random number generation
+#include <tuple>        // For creating tuples
+#include <sstream>      // For string stream operations
+#include <string>       // For string operations
+
+// Shared resources
+std::queue<std::tuple<std::string, std::string, int>> trafficQueue;  //Queue to store the traffic data
+std::unordered_map<std::string, int> trafficData;                  // Map to store colective data per traffic light
+std::mutex queueMutex, dataMutex;                                 // this has been used (Mutexes) for thread-safe operations
+std::condition_variable cv;                                       // Condition variable for thread synchronization
+bool done = false;                                                // Flag to indicate when processing is complete
+
+//Simulated file content as a string
+const std::string fileContent = 
+    "2025-03-22 08:00,TL1,15\n"    // Timestamp, Traffic Light ID, Car Count
+    "2025-03-22 08:10,TL2,23\n"    // Each line represents a traffic measurement
+    "2025-03-22 08:20,TL1,42\n"    // Format: YYYY-MM-DD HH:MM,Traffic Light ID,Number of Cars
+    "2025-03-22 08:30,TL2,18\n"    // Measurements taken at 10minute intervals
+    "2025-03-22 08:40,TL1,31\n"    // From two different traffic lights (TrafficLight1 and TrafficLight2)
+    "2025-03-22 08:50,TL2,27\n";   // Total of 6 measurements over a 50-minute period
+
+// Function to parse data from simulated file (Producer)
+void producer() 
+{
+    std::istringstream fileStream(fileContent);  //Create string stream from our simulated file
+    std::string line;                           //hold each line from the file
+    
+    while (std::getline(fileStream, line)) 
+    {    // Read each line from simulated file
+        // Simulate real-time data generation with a delay
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        
+        
+        std::istringstream lineStream(line);     // Stream for parsing the current line
+        std::string timestamp, light, carCountStr;  // Will hold the parsed values
+        
+        std::getline(lineStream, timestamp, ',');  //take timestamp
+        std::getline(lineStream, light, ',');      // take traffic light ID
+        std::getline(lineStream, carCountStr, ','); //take car count as string
+        int carCount = std::stoi(carCountStr);     //take car count to integer
+        
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);  //lock queue for thread safety
+            trafficQueue.push(std::make_tuple(timestamp, light, carCount));  //Add data to queue
+        }
+        cv.notify_one();  //Notify consumer that new data is available
+        std::cout << "[Producer] Read Traffic Data: (" << timestamp << ", " << light << ", " << carCount << " cars)\n";
+    }
+    
+    done = true;        // Set flag to indicate producer is finished
+    cv.notify_all();    // Notify all waiting threads
+}
+
+// Function to process traffic data (Consumer)
+void consumer() 
+{
+    while (true)
+    {
+        std::unique_lock<std::mutex> lock(queueMutex);  // Lock queue for thread safety
+        // Wait until there is data in the queue or the producer is done
+        cv.wait(lock, [] { return !trafficQueue.empty() || done; });
+        
+        while (!trafficQueue.empty()) 
+        {  //Process all available data in the queue
+            //Extract data from front of the queue
+            std::tuple<std::string, std::string, int> data = trafficQueue.front();
+            std::string timestamp = std::get<0>(data);  // Get timestamp from tuple
+            std::string light = std::get<1>(data);      // Get traffic light ID from tuple
+            int carCount = std::get<2>(data);           // Get car count from tuple
+            
+            trafficQueue.pop();  //Remove processed item from queue
+            lock.unlock();       //Temporarily unlock to allow producer to add the more data
+            
+            {
+                std::lock_guard<std::mutex> dataLock(dataMutex);  //it lock the data map for thread safety
+                trafficData[light] += carCount;  // total the car count for this traffic light
+            }
+            
+            std::cout << "[Consumer] Processed: " << timestamp << " - " << light << " (" << carCount << " cars)\n";
+            lock.lock();  // Re-lock the queue before checking if it is empty
+        }
+        
+        //exit loop if producer is done and queue is empty
+        if (done && trafficQueue.empty()) break;
+    }
+    
+    //Display final results - total cars per traffic light
+    std::cout << "\n--- Top Congested Traffic Lights ---\n";
+    for (const auto &entry : trafficData) {  // Iterate through all traffic lights
+        std::cout << entry.first << ": " << entry.second << " cars passed\n";
+    }
+    std::cout << "-----------------------------------\n";
+}
+
+// Main function
+int main() {
+    std::thread producerThread(producer);  // Create producer thread
+    std::thread consumerThread(consumer);  // Create consumer thread
+    
+    producerThread.join();  // Wait for producer thread to finish
+    consumerThread.join();  // Wait for consumer thread to finish
+    
+    return 0;  // Exit program
+}
